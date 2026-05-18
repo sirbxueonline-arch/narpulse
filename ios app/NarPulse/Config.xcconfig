@@ -13,10 +13,7 @@ MARKETING_VERSION = 1.0
 CURRENT_PROJECT_VERSION = 1
 
 // ===== Code signing =====
-// Simulator builds are unsigned (overridden inside the .pbxproj target settings,
-// no team needed — open the project, pick a simulator, hit Run).
-//
-// For a PHYSICAL device build set your 10-character Apple Developer Team ID
-// here. Find it at https://developer.apple.com/account → Membership.
-// Example: DEVELOPMENT_TEAM = ABCDE12345
-DEVELOPMENT_TEAM =
+// Simulator builds are unsigned (overridden inside the .pbxproj target settings).
+// Device builds use this team. Detected locally from your codesigning identity.
+// If you replace this Mac or rotate certificates, update this value.
+DEVELOPMENT_TEAM = 48675TY4D5
