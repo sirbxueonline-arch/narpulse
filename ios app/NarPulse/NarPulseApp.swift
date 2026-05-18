@@ -3,6 +3,7 @@ import MapKit
 import Observation
 import Foundation
 import UIKit
+import PhotosUI
 
 @main
 struct NarPulseApp: App {
@@ -15,6 +16,9 @@ struct NarPulseApp: App {
                 .preferredColorScheme(.dark)
                 .task {
                     await store.refresh()
+                }
+                .onOpenURL { url in
+                    Task { await store.handleAuthDeepLink(url) }
                 }
         }
     }
@@ -86,6 +90,61 @@ final class AppStore {
         self.session = nil
     }
 
+    /// Handles `narpulse://login-callback` deep links from the magic-link email.
+    /// Supports BOTH the implicit-flow URL fragment (tokens directly) AND the
+    /// token_hash query param. Either way the user lands signed in.
+    @MainActor
+    func handleAuthDeepLink(_ url: URL) async {
+        guard url.scheme == "narpulse" else { return }
+
+        // 1. Implicit flow: `narpulse://login-callback#access_token=...&refresh_token=...`
+        if let fragment = url.fragment, !fragment.isEmpty {
+            let pairs = Self.parseURLEncoded(fragment)
+            if let access = pairs["access_token"] {
+                let refresh = pairs["refresh_token"]
+                if let session = await service.sessionFromImplicitFragment(
+                    accessToken: access,
+                    refreshToken: refresh
+                ) {
+                    self.session = session
+                    return
+                }
+            }
+            if let errDesc = pairs["error_description"] {
+                offlineMessage = errDesc
+                return
+            }
+        }
+
+        // 2. token_hash flow: `narpulse://login-callback?token_hash=...&type=magiclink`
+        if let comps = URLComponents(url: url, resolvingAgainstBaseURL: false),
+           let items = comps.queryItems {
+            if let tokenHash = items.first(where: { $0.name == "token_hash" })?.value {
+                do {
+                    self.session = try await service.verifyMagicLink(tokenHash: tokenHash)
+                    return
+                } catch {
+                    offlineMessage = error.localizedDescription
+                }
+            }
+            if let errDesc = items.first(where: { $0.name == "error_description" })?.value {
+                offlineMessage = errDesc
+            }
+        }
+    }
+
+    private static func parseURLEncoded(_ s: String) -> [String: String] {
+        var out: [String: String] = [:]
+        for pair in s.split(separator: "&") {
+            let kv = pair.split(separator: "=", maxSplits: 1).map(String.init)
+            guard kv.count == 2 else { continue }
+            let key = kv[0].removingPercentEncoding ?? kv[0]
+            let val = kv[1].removingPercentEncoding ?? kv[1]
+            out[key] = val
+        }
+        return out
+    }
+
     @MainActor
     func submitWait(locationId: UUID, minutes: Int) async throws {
         guard let session else { throw AppError.notSignedIn }
@@ -94,16 +153,41 @@ final class AppStore {
     }
 
     @MainActor
-    func submitPin(lat: Double, lng: Double, category: SafetyCategory, description: String) async throws {
+    func submitPin(
+        lat: Double,
+        lng: Double,
+        category: SafetyCategory,
+        description: String,
+        photoData: Data? = nil,
+        photoContentType: String? = nil
+    ) async throws {
         guard let session else { throw AppError.notSignedIn }
+        var photoURL: URL?
+        if let data = photoData, let ct = photoContentType {
+            photoURL = try await service.uploadSafetyPhoto(
+                session: session,
+                imageData: data,
+                contentType: ct
+            )
+        }
         let pin = try await service.submitPin(
             session: session,
             lat: lat,
             lng: lng,
             category: category,
-            description: description.trimmingCharacters(in: .whitespacesAndNewlines)
+            description: description.trimmingCharacters(in: .whitespacesAndNewlines),
+            photoURL: photoURL
         )
         pins.insert(pin, at: 0)
+    }
+
+    @MainActor
+    func upvotePin(pinId: UUID) async throws {
+        guard let session else { throw AppError.notSignedIn }
+        try await service.upvotePin(session: session, pinId: pinId)
+        if let idx = pins.firstIndex(where: { $0.id == pinId }) {
+            pins[idx].upvotes += 1
+        }
     }
 
     @MainActor
@@ -347,6 +431,7 @@ struct OutagesView: View {
                 .listStyle(.plain)
                 .scrollContentBackground(.hidden)
                 .background(Color.npBg)
+                .refreshable { await store.refresh() }
             }
             .navigationTitle("Kəsintilər")
             .navigationBarTitleDisplayMode(.inline)
@@ -400,6 +485,7 @@ struct WaitTimesView: View {
             .listStyle(.plain)
             .scrollContentBackground(.hidden)
             .background(Color.npBg)
+            .refreshable { await store.refresh() }
             .navigationTitle("Növbələr")
             .sheet(item: $selectedSummary) { summary in
                 QueueDetailView(summary: summary)
@@ -555,14 +641,15 @@ struct AccountView: View {
                 }
                 .disabled(sending || !isValidEmail(email))
                 .buttonStyle(PrimaryButtonStyle())
-            } else {
-                TextField("123456", text: $code)
-                    .keyboardType(.numberPad)
-                    .textContentType(.oneTimeCode)
-                    .padding(12)
-                    .background(Color.npSurface2, in: RoundedRectangle(cornerRadius: 12))
-                    .font(.system(.title3, design: .monospaced).weight(.heavy))
+                Text("E-poçtda 6 rəqəmli kod **və ya** link alacaqsınız. Linki bu cihazdan açsanız avtomatik daxil olacaqsınız.")
+                    .font(.caption)
+                    .foregroundStyle(.npMuted)
                     .multilineTextAlignment(.center)
+                    .padding(.horizontal, 4)
+            } else {
+                OTPCodeField(code: $code) {
+                    Task { await verify() }
+                }
                 Button {
                     Task { await verify() }
                 } label: {
@@ -658,6 +745,102 @@ struct AccountView: View {
         } catch {
             status = .error(error.localizedDescription)
         }
+    }
+}
+
+/// 6-digit one-time-code input rendered as 6 tiles.
+/// An invisible TextField drives the keyboard + system OTP autofill;
+/// the tiles are pure presentation that mirror its current value.
+struct OTPCodeField: View {
+    @Binding var code: String
+    let length: Int = 6
+    let onComplete: () -> Void
+
+    @FocusState private var focused: Bool
+
+    var body: some View {
+        ZStack {
+            // Hidden source of truth — drives the keyboard + iOS OTP autofill.
+            TextField("", text: $code)
+                .keyboardType(.numberPad)
+                .textContentType(.oneTimeCode)
+                .focused($focused)
+                .foregroundColor(.clear)
+                .accentColor(.clear)
+                .tint(.clear)
+                .frame(width: 1, height: 1)
+                .opacity(0.01)
+                .onChange(of: code) { _, new in
+                    // Sanitize to digits only, cap at length, auto-submit at length.
+                    let digits = String(new.filter(\.isNumber).prefix(length))
+                    if digits != new { code = digits }
+                    if digits.count == length {
+                        focused = false
+                        onComplete()
+                    }
+                }
+
+            HStack(spacing: 10) {
+                ForEach(0..<length, id: \.self) { idx in
+                    OTPTile(
+                        character: characterAt(idx),
+                        isActive: idx == code.count && focused,
+                        isFilled: idx < code.count
+                    )
+                    .onTapGesture { focused = true }
+                }
+            }
+        }
+        .frame(maxWidth: .infinity)
+        .onAppear { focused = true }
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel("Altı rəqəmli kod")
+        .accessibilityValue(code)
+    }
+
+    private func characterAt(_ i: Int) -> String? {
+        guard i < code.count else { return nil }
+        let idx = code.index(code.startIndex, offsetBy: i)
+        return String(code[idx])
+    }
+}
+
+private struct OTPTile: View {
+    let character: String?
+    let isActive: Bool
+    let isFilled: Bool
+
+    @State private var blink = false
+
+    var body: some View {
+        ZStack {
+            RoundedRectangle(cornerRadius: 14)
+                .fill(Color.npSurface2)
+            RoundedRectangle(cornerRadius: 14)
+                .strokeBorder(
+                    isActive ? Color.npAccent : (isFilled ? Color.npBorder : Color.npBorder.opacity(0.6)),
+                    lineWidth: isActive ? 2 : 1
+                )
+            if let character {
+                Text(character)
+                    .font(.system(size: 26, weight: .heavy, design: .monospaced))
+                    .foregroundStyle(.npText)
+            } else if isActive {
+                // blinking caret
+                Capsule()
+                    .fill(Color.npAccent)
+                    .frame(width: 2, height: 24)
+                    .opacity(blink ? 0 : 1)
+                    .onAppear {
+                        withAnimation(.easeInOut(duration: 0.55).repeatForever(autoreverses: true)) {
+                            blink.toggle()
+                        }
+                    }
+            }
+        }
+        .frame(width: 48, height: 58)
+        .shadow(color: isActive ? Color.npAccent.opacity(0.25) : .clear, radius: 8, y: 2)
+        .animation(.easeOut(duration: 0.15), value: isActive)
     }
 }
 
@@ -1115,7 +1298,16 @@ struct OutageDetailSheet: View {
 
 struct SafetyPinDetailView: View {
     let pin: SafetyPin
+    @Environment(AppStore.self) private var store
     @State private var voted = false
+    @State private var votes: Int
+    @State private var submitting = false
+    @State private var errorMessage: String?
+
+    init(pin: SafetyPin) {
+        self.pin = pin
+        _votes = State(initialValue: pin.upvotes)
+    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
@@ -1132,19 +1324,78 @@ struct SafetyPinDetailView: View {
                     Text(pin.status.label)
                         .font(.title3.weight(.heavy))
                 }
+                Spacer()
+                Text("\(votes)")
+                    .font(.title2.weight(.heavy))
+                    .foregroundStyle(.npText)
+                    .padding(.horizontal, 12)
+                    .padding(.vertical, 6)
+                    .background(Color.npSurface2, in: Capsule())
+            }
+            if let photoURL = pin.photoURL {
+                AsyncImage(url: photoURL) { phase in
+                    switch phase {
+                    case .empty:
+                        RoundedRectangle(cornerRadius: 14)
+                            .fill(Color.npSurface2)
+                            .frame(height: 180)
+                            .overlay(ProgressView())
+                    case .success(let image):
+                        image.resizable().scaledToFill()
+                            .frame(maxWidth: .infinity, maxHeight: 200)
+                            .clipShape(RoundedRectangle(cornerRadius: 14))
+                    case .failure:
+                        EmptyView()
+                    @unknown default:
+                        EmptyView()
+                    }
+                }
             }
             Text(pin.description ?? "Təsvir yoxdur.")
-            Button {
-                voted = true
-                UINotificationFeedbackGenerator().notificationOccurred(.success)
-            } label: {
-                Label(voted ? "Səs verdiniz" : "Mən də gördüm", systemImage: "hand.thumbsup.fill")
+                .foregroundStyle(.npText)
+
+            if let errorMessage {
+                Text(errorMessage)
+                    .font(.footnote.weight(.semibold))
+                    .foregroundStyle(.npAccent2)
             }
+
+            Button {
+                Task { await upvote() }
+            } label: {
+                HStack {
+                    if submitting { ProgressView().tint(.white) }
+                    Label(voted ? "Səs verdiniz" : "Mən də gördüm", systemImage: "hand.thumbsup.fill")
+                }
+            }
+            .disabled(voted || submitting || store.session == nil)
             .buttonStyle(PrimaryButtonStyle())
+
+            if store.session == nil {
+                Text("Səs vermək üçün Hesab tabından daxil olun.")
+                    .font(.footnote)
+                    .foregroundStyle(.npMuted)
+            }
             Spacer()
         }
         .padding(20)
         .background(Color.npBg)
+    }
+
+    @MainActor
+    private func upvote() async {
+        errorMessage = nil
+        submitting = true
+        defer { submitting = false }
+        do {
+            try await store.upvotePin(pinId: pin.id)
+            voted = true
+            votes += 1
+            UINotificationFeedbackGenerator().notificationOccurred(.success)
+        } catch {
+            UINotificationFeedbackGenerator().notificationOccurred(.error)
+            errorMessage = error.localizedDescription
+        }
     }
 }
 
@@ -1156,6 +1407,9 @@ struct AddSafetyPinView: View {
     @State private var description = ""
     @State private var submitting = false
     @State private var errorMessage: String?
+    @State private var photoItem: PhotosPickerItem?
+    @State private var photoData: Data?
+    @State private var photoContentType: String?
 
     var body: some View {
         NavigationStack {
@@ -1173,6 +1427,39 @@ struct AddSafetyPinView: View {
                 } footer: {
                     Text("Yer: \(String(format: "%.4f", coordinate.latitude)), \(String(format: "%.4f", coordinate.longitude))")
                         .foregroundStyle(.npMuted)
+                }
+
+                Section("Şəkil (istəyə bağlı)") {
+                    PhotosPicker(selection: $photoItem, matching: .images) {
+                        if let photoData, let uiImage = UIImage(data: photoData) {
+                            HStack(spacing: 12) {
+                                Image(uiImage: uiImage)
+                                    .resizable()
+                                    .scaledToFill()
+                                    .frame(width: 72, height: 72)
+                                    .clipShape(RoundedRectangle(cornerRadius: 12))
+                                VStack(alignment: .leading, spacing: 2) {
+                                    Text("Şəkil seçildi")
+                                        .font(.subheadline.weight(.semibold))
+                                    Text("\(photoData.count / 1024) KB · dəyişdirmək üçün toxun")
+                                        .font(.caption)
+                                        .foregroundStyle(.npMuted)
+                                }
+                                Spacer()
+                            }
+                        } else {
+                            Label("Foto əlavə et", systemImage: "photo.on.rectangle.angled")
+                        }
+                    }
+                    if photoData != nil {
+                        Button(role: .destructive) {
+                            photoData = nil
+                            photoItem = nil
+                            photoContentType = nil
+                        } label: {
+                            Label("Şəkli sil", systemImage: "trash")
+                        }
+                    }
                 }
 
                 if store.session == nil {
@@ -1211,6 +1498,20 @@ struct AddSafetyPinView: View {
                     Button("Ləğv et") { dismiss() }
                 }
             }
+            .onChange(of: photoItem) { _, newValue in
+                guard let newValue else { return }
+                Task { await loadPhoto(newValue) }
+            }
+        }
+    }
+
+    @MainActor
+    private func loadPhoto(_ item: PhotosPickerItem) async {
+        if let data = try? await item.loadTransferable(type: Data.self) {
+            // Try to detect content type from the supported types; fall back to jpeg.
+            let ct = item.supportedContentTypes.first?.preferredMIMEType ?? "image/jpeg"
+            photoData = data
+            photoContentType = ct
         }
     }
 
@@ -1224,7 +1525,9 @@ struct AddSafetyPinView: View {
                 lat: coordinate.latitude,
                 lng: coordinate.longitude,
                 category: category,
-                description: description
+                description: description,
+                photoData: photoData,
+                photoContentType: photoContentType
             )
             UINotificationFeedbackGenerator().notificationOccurred(.success)
             dismiss()
@@ -1801,6 +2104,8 @@ actor NarPulseService {
 
     // MARK: - Auth
 
+    static let magicLinkRedirect = "narpulse://login-callback"
+
     func sendOtp(email: String) async throws {
         guard let baseURL, !anonKey.isEmpty else { throw AppError.notConfigured }
         let url = baseURL.appendingPathComponent("auth/v1/otp")
@@ -1808,12 +2113,79 @@ actor NarPulseService {
         req.httpMethod = "POST"
         req.setValue(anonKey, forHTTPHeaderField: "apikey")
         req.setValue("application/json", forHTTPHeaderField: "Content-Type")
-        let body: [String: Any] = ["email": email, "create_user": true]
+        // email_redirect_to makes the magic link in the email open the iOS app
+        // via the narpulse:// URL scheme. Works alongside the 6-digit code:
+        // user can either type the code OR tap the link from their phone's
+        // mail client — both end up signed in.
+        let body: [String: Any] = [
+            "email": email,
+            "create_user": true,
+            "email_redirect_to": Self.magicLinkRedirect
+        ]
         req.httpBody = try JSONSerialization.data(withJSONObject: body)
         let (data, response) = try await URLSession.shared.data(for: req)
         guard let http = response as? HTTPURLResponse, (200..<300).contains(http.statusCode) else {
             throw AppError.server(Self.errorMessage(from: data, fallback: "Kod göndərilmədi"))
         }
+    }
+
+    /// Magic-link click flow (token_hash from the URL Supabase redirects to).
+    func verifyMagicLink(tokenHash: String) async throws -> AuthSession {
+        guard let baseURL, !anonKey.isEmpty else { throw AppError.notConfigured }
+        let url = baseURL.appendingPathComponent("auth/v1/verify")
+        var req = URLRequest(url: url)
+        req.httpMethod = "POST"
+        req.setValue(anonKey, forHTTPHeaderField: "apikey")
+        req.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        let body: [String: Any] = ["token_hash": tokenHash, "type": "magiclink"]
+        req.httpBody = try JSONSerialization.data(withJSONObject: body)
+        let (data, response) = try await URLSession.shared.data(for: req)
+        guard let http = response as? HTTPURLResponse, (200..<300).contains(http.statusCode) else {
+            throw AppError.server(Self.errorMessage(from: data, fallback: "Link etibarsızdır"))
+        }
+        struct VerifyResponse: Decodable {
+            let access_token: String
+            let refresh_token: String?
+            let user: VerifyUser
+        }
+        struct VerifyUser: Decodable {
+            let id: String
+            let email: String?
+        }
+        let decoded = try JSONDecoder().decode(VerifyResponse.self, from: data)
+        return AuthSession(
+            accessToken: decoded.access_token,
+            refreshToken: decoded.refresh_token,
+            userId: decoded.user.id,
+            email: decoded.user.email ?? ""
+        )
+    }
+
+    /// Implicit-flow (tokens already present in URL hash) — JWT-decode the
+    /// access token to recover userId + email instead of round-tripping.
+    func sessionFromImplicitFragment(accessToken: String, refreshToken: String?) -> AuthSession? {
+        let parts = accessToken.split(separator: ".")
+        guard parts.count >= 2,
+              let payloadData = Self.base64URLDecode(String(parts[1])),
+              let json = try? JSONSerialization.jsonObject(with: payloadData) as? [String: Any]
+        else { return nil }
+        let userId = (json["sub"] as? String) ?? ""
+        let email = (json["email"] as? String) ?? ""
+        guard !userId.isEmpty else { return nil }
+        return AuthSession(
+            accessToken: accessToken,
+            refreshToken: refreshToken,
+            userId: userId,
+            email: email
+        )
+    }
+
+    private static func base64URLDecode(_ s: String) -> Data? {
+        var str = s.replacingOccurrences(of: "-", with: "+").replacingOccurrences(of: "_", with: "/")
+        // pad to a multiple of 4
+        let padding = (4 - str.count % 4) % 4
+        str += String(repeating: "=", count: padding)
+        return Data(base64Encoded: str)
     }
 
     func verifyOtp(email: String, token: String) async throws -> AuthSession {
@@ -1873,6 +2245,55 @@ actor NarPulseService {
         return first
     }
 
+    func upvotePin(session: AuthSession, pinId: UUID) async throws {
+        guard let baseURL, !anonKey.isEmpty else { throw AppError.notConfigured }
+        let url = baseURL.appendingPathComponent("rest/v1/pin_votes")
+        var req = URLRequest(url: url)
+        req.httpMethod = "POST"
+        req.setValue(anonKey, forHTTPHeaderField: "apikey")
+        req.setValue("Bearer \(session.accessToken)", forHTTPHeaderField: "Authorization")
+        req.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        // Don't return rows — server-side trigger handles incrementing upvotes.
+        req.setValue("return=minimal", forHTTPHeaderField: "Prefer")
+        let body: [String: Any] = [
+            "pin_id": pinId.uuidString.lowercased(),
+            "user_id": session.userId
+        ]
+        req.httpBody = try JSONSerialization.data(withJSONObject: body)
+        let (data, response) = try await URLSession.shared.data(for: req)
+        guard let http = response as? HTTPURLResponse, (200..<300).contains(http.statusCode) else {
+            let msg = Self.errorMessage(from: data, fallback: "Səs verilmədi")
+            // Duplicate primary key (pin_id, user_id) = already voted.
+            if msg.localizedCaseInsensitiveContains("duplicate") ||
+               msg.localizedCaseInsensitiveContains("23505") {
+                throw AppError.server("Artıq səs vermisiniz.")
+            }
+            throw AppError.server(msg)
+        }
+    }
+
+    func uploadSafetyPhoto(session: AuthSession, imageData: Data, contentType: String) async throws -> URL {
+        guard let baseURL, !anonKey.isEmpty else { throw AppError.notConfigured }
+        let filename = "\(UUID().uuidString.lowercased()).\(contentType.split(separator: "/").last ?? "jpg")"
+        let path = "\(session.userId)/\(filename)"
+        let url = baseURL.appendingPathComponent("storage/v1/object/safety-photos/\(path)")
+        var req = URLRequest(url: url)
+        req.httpMethod = "POST"
+        req.setValue(anonKey, forHTTPHeaderField: "apikey")
+        req.setValue("Bearer \(session.accessToken)", forHTTPHeaderField: "Authorization")
+        req.setValue(contentType, forHTTPHeaderField: "Content-Type")
+        req.setValue("3600", forHTTPHeaderField: "Cache-Control")
+        req.httpBody = imageData
+        let (data, response) = try await URLSession.shared.data(for: req)
+        guard let http = response as? HTTPURLResponse, (200..<300).contains(http.statusCode) else {
+            throw AppError.server(Self.errorMessage(from: data, fallback: "Şəkil yüklənmədi"))
+        }
+        // Bucket is public, return a stable public URL.
+        let publicURL = baseURL
+            .appendingPathComponent("storage/v1/object/public/safety-photos/\(path)")
+        return publicURL
+    }
+
     func submitOutage(
         session: AuthSession,
         utility: Utility,
@@ -1929,7 +2350,8 @@ actor NarPulseService {
         lat: Double,
         lng: Double,
         category: SafetyCategory,
-        description: String
+        description: String,
+        photoURL: URL?
     ) async throws -> SafetyPin {
         guard let baseURL, !anonKey.isEmpty else { throw AppError.notConfigured }
         let url = baseURL.appendingPathComponent("rest/v1/safety_pins")
@@ -1947,6 +2369,9 @@ actor NarPulseService {
         ]
         if !description.isEmpty {
             body["description"] = description
+        }
+        if let photoURL {
+            body["photo_url"] = photoURL.absoluteString
         }
         req.httpBody = try JSONSerialization.data(withJSONObject: body)
         let (data, response) = try await URLSession.shared.data(for: req)
