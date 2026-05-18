@@ -71,6 +71,7 @@
 				AA0000000000000000000100 /* Sources */,
 				AA00000000000000000000D0 /* Frameworks */,
 				AA0000000000000000000101 /* Resources */,
+				AA0000000000000000000200 /* Strip xattrs */,
 			);
 			buildRules = (
 			);
@@ -126,6 +127,28 @@
 			runOnlyForDeploymentPostprocessing = 0;
 		};
 /* End PBXResourcesBuildPhase section */
+
+/* Begin PBXShellScriptBuildPhase section */
+		AA0000000000000000000200 /* Strip xattrs */ = {
+			isa = PBXShellScriptBuildPhase;
+			alwaysOutOfDate = 1;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			inputFileListPaths = (
+			);
+			inputPaths = (
+			);
+			name = "Strip xattrs (for codesign)";
+			outputFileListPaths = (
+			);
+			outputPaths = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+			shellPath = /bin/sh;
+			shellScript = "# codesign rejects bundles carrying com.apple.FinderInfo or other xattrs.\n# Strip them recursively from the freshly built .app before signing runs.\n/usr/bin/xattr -cr \"${BUILT_PRODUCTS_DIR}/${WRAPPER_NAME}\" 2>/dev/null || true\n";
+		};
+/* End PBXShellScriptBuildPhase section */
 
 /* Begin PBXSourcesBuildPhase section */
 		AA0000000000000000000100 /* Sources */ = {
@@ -283,7 +306,7 @@
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
 				DEVELOPMENT_ASSET_PATHS = "";
-				DEVELOPMENT_TEAM = 48675TY4D5;
+				DEVELOPMENT_TEAM = LKT66TJGRY;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = NO;
 				INFOPLIST_FILE = NarPulse/Info.plist;
@@ -317,7 +340,7 @@
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
 				DEVELOPMENT_ASSET_PATHS = "";
-				DEVELOPMENT_TEAM = 48675TY4D5;
+				DEVELOPMENT_TEAM = LKT66TJGRY;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = NO;
 				INFOPLIST_FILE = NarPulse/Info.plist;

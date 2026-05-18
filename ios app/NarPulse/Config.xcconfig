@@ -16,4 +16,4 @@ CURRENT_PROJECT_VERSION = 1
 // Simulator builds are unsigned (overridden inside the .pbxproj target settings).
 // Device builds use this team. Detected locally from your codesigning identity.
 // If you replace this Mac or rotate certificates, update this value.
-DEVELOPMENT_TEAM = 48675TY4D5
+DEVELOPMENT_TEAM = LKT66TJGRY
