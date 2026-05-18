@@ -1,0 +1,14 @@
+# Xcode build artifacts
+build/
+DerivedData/
+
+# Xcode user data — keep shared scheme, drop personal state
+xcuserdata/
+*.xcuserstate
+
+# Resolved Swift Package versions
+*.xcworkspace/xcuserdata/
+*.xcodeproj/xcuserdata/
+
+# Misc
+.DS_Store

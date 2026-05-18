@@ -1,34 +1,96 @@
-# NarPulse iOS
+# NarPulse iOS — SwiftUI
 
-Native SwiftUI resident app for the NarPulse demo. It follows `pulse.html`: iOS 17+, resident-only, dark NarPulse branding, MapKit maps, Azerbaijani-first UI, and the same Supabase tables used by the website.
+Native SwiftUI resident app for NarPulse. iOS 17+, dark brand theme, MapKit, Azerbaijani-first UI, same Supabase tables as the web app.
 
-## What is included
+> If you'd rather use a cross-platform RN/Expo build, see [`../ios-app/`](../ios-app/).
 
-- `NarPulseApp.swift` - complete SwiftUI app source with home, outages, wait times, safety pins, account, onboarding, MapKit annotations, mock fallback data, and Supabase REST reads.
-- `Config.xcconfig` - build settings placeholders for Supabase URL and anon key.
-- `Info.plist` - Supabase config expansion and Azerbaijani privacy strings.
-- `pulse.html` - original build brief.
+## Project layout
 
-## Run in Xcode
+```
+ios app/
+├── NarPulse.xcodeproj/                   ← Xcode project (open this)
+│   ├── project.pbxproj
+│   └── xcshareddata/xcschemes/NarPulse.xcscheme
+├── NarPulse/                              ← target source group
+│   ├── NarPulseApp.swift                  ← entire app in one file
+│   ├── Info.plist                         ← bundle keys + permissions + $(SUPABASE_*) refs
+│   ├── Config.xcconfig                    ← bundle id, deployment target, Supabase env
+│   ├── Assets.xcassets/                   ← AppIcon + AccentColor
+│   ├── az.lproj/Localizable.strings       ← Azerbaijani
+│   └── en.lproj/Localizable.strings       ← English
+├── pulse.html                             ← original build brief, not bundled
+├── .gitignore
+└── README.md
+```
 
-1. Create a new iOS App project in this folder or add these files to an existing iOS 17+ SwiftUI target named `NarPulse`.
-2. Add `NarPulseApp.swift` to the app target.
-3. Set the target Info.plist to `Info.plist` or copy its keys into the generated target plist.
-4. Assign `Config.xcconfig` to Debug and Release build configurations.
-5. Copy values from the website `.env.local`:
-   - `NEXT_PUBLIC_SUPABASE_URL` -> `SUPABASE_URL`
-   - `NEXT_PUBLIC_SUPABASE_ANON_KEY` -> `SUPABASE_ANON_KEY`
-6. Run on an iPhone or iOS 17+ simulator.
+## Build & run
 
-If the Supabase values are empty, the app still runs with local demo data so the UI can be reviewed immediately.
+### From the command line (no Xcode UI)
 
-## Backend sync
+```bash
+cd "ios app"
 
-The app reads the same tables as the website:
+# Build for the iOS Simulator (any arch)
+xcodebuild \
+  -project NarPulse.xcodeproj \
+  -scheme NarPulse \
+  -configuration Debug \
+  -destination 'generic/platform=iOS Simulator' \
+  -derivedDataPath ./build \
+  CODE_SIGNING_ALLOWED=NO \
+  build
+```
 
-- `outages`
-- `service_locations`
-- `wait_checkins`
-- `safety_pins`
+The `.app` lands in `./build/Build/Products/Debug-iphonesimulator/NarPulse.app`.
 
-No schema changes are required.
+### In Xcode
+
+```bash
+open "ios app/NarPulse.xcodeproj"
+```
+
+Select the **NarPulse** scheme, pick a simulator destination, hit ▶️ Run. The first launch shows the onboarding screens, then drops you into the four-tab UI.
+
+### On a physical device
+
+The `Config.xcconfig` sets `PRODUCT_BUNDLE_IDENTIFIER = io.narpulse.ios`. Change it to something unique under your team, set your team in **Signing & Capabilities**, then Run.
+
+## Configure Supabase
+
+Open `NarPulse/Config.xcconfig`:
+
+```
+SUPABASE_URL = https://YOURPROJECT.supabase.co
+SUPABASE_ANON_KEY = eyJhbGciOi...
+```
+
+Note: xcconfig values **don't quote**, don't include `//` in URLs without escaping (Xcode treats `//` as a comment unless you write `https:/$()/...` — the simplest workaround is to keep the URL on a `$(()` boundary or just use Xcode's build settings UI).
+
+These get substituted into `Info.plist` at build time. The Swift source reads them via `Bundle.main.infoDictionary` at startup.
+
+**If Supabase is empty**, the app boots into demo mode with full Nərimanov mock data so the UI is reviewable instantly.
+
+## Schema
+
+Same tables as the web app (see `../supabase/migrations/0001_init.sql`):
+
+| Table | Used for |
+|---|---|
+| `outages` | Live outage map + list |
+| `service_locations` | Queue markers |
+| `wait_checkins` | Median wait calculation |
+| `safety_pins` | Safety pin map + upvotes |
+
+No iOS-specific migrations.
+
+## Permissions (Info.plist)
+
+- `NSLocationWhenInUseUsageDescription` — to show "you are here" on the map
+- `NSCameraUsageDescription` — to attach a photo to a safety pin
+- `NSPhotoLibraryUsageDescription` — to pick an existing photo
+
+All strings are in Azerbaijani per district guidance.
+
+## Frameworks
+
+Built-in only: **SwiftUI · MapKit · Observation · Foundation · UIKit**. No SwiftPM dependencies, no CocoaPods. `xcodebuild` works out of the box.

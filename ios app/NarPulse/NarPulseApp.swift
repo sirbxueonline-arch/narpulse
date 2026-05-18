@@ -393,9 +393,9 @@ struct OnboardingView: View {
     var body: some View {
         VStack(spacing: 0) {
             TabView {
-                OnboardingCard(icon: "dot.radiowaves.left.and.right", title: "Kəsintiləri canlı gör", body: "Su, işıq və qaz bildirişləri xəritədə və siyahıda eyni anda yenilənir.")
-                OnboardingCard(icon: "clock.badge.checkmark", title: "Növbəni əvvəlcədən bil", body: "Sakin hesabatları ilə ASAN, poçt və poliklinika gözləmə vaxtını gör.")
-                OnboardingCard(icon: "exclamationmark.triangle.fill", title: "Təhlükəli nöqtəni bildir", body: "Şəkil, kateqoriya və məkanla RİH komandasına aydın siqnal göndər.")
+                OnboardingCard(icon: "dot.radiowaves.left.and.right", title: "Kəsintiləri canlı gör", message: "Su, işıq və qaz bildirişləri xəritədə və siyahıda eyni anda yenilənir.")
+                OnboardingCard(icon: "clock.badge.checkmark", title: "Növbəni əvvəlcədən bil", message: "Sakin hesabatları ilə ASAN, poçt və poliklinika gözləmə vaxtını gör.")
+                OnboardingCard(icon: "exclamationmark.triangle.fill", title: "Təhlükəli nöqtəni bildir", message: "Şəkil, kateqoriya və məkanla RİH komandasına aydın siqnal göndər.")
             }
             .tabViewStyle(.page(indexDisplayMode: .always))
 
@@ -865,7 +865,7 @@ struct AddSafetyPinView: View {
 struct OnboardingCard: View {
     let icon: String
     let title: String
-    let body: String
+    let message: String
 
     var body: some View {
         VStack(spacing: 18) {
@@ -879,7 +879,7 @@ struct OnboardingCard: View {
             Text(title)
                 .font(.system(.title, design: .rounded).weight(.heavy))
                 .multilineTextAlignment(.center)
-            Text(body)
+            Text(message)
                 .font(.body)
                 .foregroundStyle(.npMuted)
                 .multilineTextAlignment(.center)
@@ -982,6 +982,21 @@ extension Color {
     static let npAccent2 = Color(red: 0.902, green: 0.224, blue: 0.314)
     static let npSuccess = Color(red: 0.247, green: 0.714, blue: 0.545)
     static let npWarning = Color(red: 0.949, green: 0.706, blue: 0.255)
+}
+
+// Enables the `.npText` etc. shorthand inside `foregroundStyle(_:)`, `fill(_:)`
+// and any other ShapeStyle-typed parameter.
+extension ShapeStyle where Self == Color {
+    static var npBg: Color { .npBg }
+    static var npSurface: Color { .npSurface }
+    static var npSurface2: Color { .npSurface2 }
+    static var npBorder: Color { .npBorder }
+    static var npText: Color { .npText }
+    static var npMuted: Color { .npMuted }
+    static var npAccent: Color { .npAccent }
+    static var npAccent2: Color { .npAccent2 }
+    static var npSuccess: Color { .npSuccess }
+    static var npWarning: Color { .npWarning }
 }
 
 extension MKCoordinateRegion {
