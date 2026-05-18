@@ -20,6 +20,26 @@ struct NarPulseApp: App {
     }
 }
 
+struct AuthSession: Codable, Equatable {
+    let accessToken: String
+    let refreshToken: String?
+    let userId: String
+    let email: String
+}
+
+enum AppError: LocalizedError {
+    case notConfigured
+    case notSignedIn
+    case server(String)
+    var errorDescription: String? {
+        switch self {
+        case .notConfigured: return "Supabase URL/açar tənzimlənməyib."
+        case .notSignedIn: return "Daxil olmalısınız."
+        case .server(let msg): return msg
+        }
+    }
+}
+
 @Observable
 final class AppStore {
     var outages: [Outage] = MockData.outages
@@ -29,8 +49,88 @@ final class AppStore {
     var isLoading = false
     var lastUpdated: Date?
     var offlineMessage: String?
+    var session: AuthSession? {
+        didSet { persistSession() }
+    }
 
     private let service = NarPulseService()
+    private let sessionKey = "narpulse.session.v1"
+
+    init() {
+        if let data = UserDefaults.standard.data(forKey: sessionKey),
+           let s = try? JSONDecoder().decode(AuthSession.self, from: data) {
+            self.session = s
+        }
+    }
+
+    private func persistSession() {
+        if let s = session, let data = try? JSONEncoder().encode(s) {
+            UserDefaults.standard.set(data, forKey: sessionKey)
+        } else {
+            UserDefaults.standard.removeObject(forKey: sessionKey)
+        }
+    }
+
+    @MainActor
+    func sendOtp(email: String) async throws {
+        try await service.sendOtp(email: email)
+    }
+
+    @MainActor
+    func verifyOtp(email: String, token: String) async throws {
+        self.session = try await service.verifyOtp(email: email, token: token)
+    }
+
+    @MainActor
+    func signOut() {
+        self.session = nil
+    }
+
+    @MainActor
+    func submitWait(locationId: UUID, minutes: Int) async throws {
+        guard let session else { throw AppError.notSignedIn }
+        let checkin = try await service.submitWait(session: session, locationId: locationId, minutes: minutes)
+        waits.insert(checkin, at: 0)
+    }
+
+    @MainActor
+    func submitPin(lat: Double, lng: Double, category: SafetyCategory, description: String) async throws {
+        guard let session else { throw AppError.notSignedIn }
+        let pin = try await service.submitPin(
+            session: session,
+            lat: lat,
+            lng: lng,
+            category: category,
+            description: description.trimmingCharacters(in: .whitespacesAndNewlines)
+        )
+        pins.insert(pin, at: 0)
+    }
+
+    @MainActor
+    func submitOutage(
+        utility: Utility,
+        status: OutageStatus,
+        areaName: String,
+        lat: Double,
+        lng: Double,
+        radiusM: Int,
+        estimatedEnd: Date?,
+        description: String
+    ) async throws {
+        guard let session else { throw AppError.notSignedIn }
+        let outage = try await service.submitOutage(
+            session: session,
+            utility: utility,
+            status: status,
+            areaName: areaName,
+            lat: lat,
+            lng: lng,
+            radiusM: radiusM,
+            estimatedEnd: estimatedEnd,
+            description: description.trimmingCharacters(in: .whitespacesAndNewlines)
+        )
+        outages.insert(outage, at: 0)
+    }
 
     var activeOutages: [Outage] {
         outages.filter { $0.status == .active }
@@ -201,6 +301,8 @@ struct OutagesView: View {
     @State private var filter: Utility?
     @State private var selectedOutage: Outage?
     @State private var position = MapCameraPosition.region(MKCoordinateRegion.narimanov)
+    @State private var showAddOutage = false
+    @State private var currentCenter = MKCoordinateRegion.narimanov.center
 
     private var visibleOutages: [Outage] {
         (store.activeOutages + store.plannedOutages).filter { outage in
@@ -220,6 +322,9 @@ struct OutagesView: View {
                     }
                 }
                 .mapStyle(.standard(elevation: .realistic))
+                .onMapCameraChange { context in
+                    currentCenter = context.region.center
+                }
                 .frame(height: 330)
                 .overlay(alignment: .topLeading) {
                     UtilityFilter(selected: $filter)
@@ -245,10 +350,24 @@ struct OutagesView: View {
             }
             .navigationTitle("Kəsintilər")
             .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button {
+                        showAddOutage = true
+                    } label: {
+                        Label("Əlavə et", systemImage: "plus.circle.fill")
+                            .foregroundStyle(.npAccent2)
+                    }
+                }
+            }
             .sheet(item: $selectedOutage) { outage in
                 OutageDetailSheet(outage: outage)
                     .presentationDetents([.medium, .large])
                     .presentationDragIndicator(.visible)
+            }
+            .sheet(isPresented: $showAddOutage) {
+                AddOutageView(coordinate: currentCenter)
+                    .presentationDetents([.large])
             }
         }
     }
@@ -299,6 +418,7 @@ struct SafetyView: View {
     @State private var selectedPin: SafetyPin?
     @State private var showAddPin = false
     @State private var position = MapCameraPosition.region(MKCoordinateRegion.narimanov)
+    @State private var currentCenter = MKCoordinateRegion.narimanov.center
 
     var body: some View {
         NavigationStack {
@@ -312,7 +432,18 @@ struct SafetyView: View {
                     }
                 }
                 .mapStyle(.standard(elevation: .realistic))
+                .onMapCameraChange { context in
+                    currentCenter = context.region.center
+                }
                 .ignoresSafeArea(edges: .bottom)
+
+                // Crosshair so users know the pin lands at the visible center
+                Image(systemName: "plus.viewfinder")
+                    .font(.system(size: 26, weight: .semibold))
+                    .foregroundStyle(.npAccent.opacity(0.85))
+                    .shadow(color: .black.opacity(0.4), radius: 4, y: 1)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    .allowsHitTesting(false)
 
                 Button {
                     showAddPin = true
@@ -334,7 +465,7 @@ struct SafetyView: View {
                     .presentationDetents([.medium])
             }
             .sheet(isPresented: $showAddPin) {
-                AddSafetyPinView()
+                AddSafetyPinView(coordinate: currentCenter)
                     .presentationDetents([.large])
             }
         }
@@ -342,32 +473,38 @@ struct SafetyView: View {
 }
 
 struct AccountView: View {
+    @Environment(AppStore.self) private var store
     @State private var email = ""
+    @State private var code = ""
+    @State private var awaitingCode = false
+    @State private var sending = false
+    @State private var verifying = false
+    @State private var status: AccountStatus?
     @State private var notificationsEnabled = true
+
+    enum AccountStatus: Equatable {
+        case info(String)
+        case error(String)
+        var text: String {
+            switch self {
+            case .info(let s), .error(let s): return s
+            }
+        }
+        var isError: Bool {
+            if case .error = self { return true }
+            return false
+        }
+    }
 
     var body: some View {
         NavigationStack {
             ScrollView {
                 VStack(spacing: 14) {
-                    VStack(spacing: 12) {
-                        Image(systemName: "person.crop.circle.badge.checkmark")
-                            .font(.system(size: 54))
-                            .foregroundStyle(.npAccent2)
-                        Text("Magic link ilə daxil ol")
-                            .font(.title3.weight(.heavy))
-                        Text("Hesabat vermək və pin əlavə etmək üçün e-poçt linki al.")
-                            .font(.subheadline)
-                            .foregroundStyle(.npMuted)
-                            .multilineTextAlignment(.center)
-                        TextField("siz@example.com", text: $email)
-                            .textInputAutocapitalization(.never)
-                            .keyboardType(.emailAddress)
-                            .padding(12)
-                            .background(Color.npSurface2, in: RoundedRectangle(cornerRadius: 12))
-                        Button("Link göndər") {}
-                            .buttonStyle(PrimaryButtonStyle())
+                    if let session = store.session {
+                        signedInCard(session: session)
+                    } else {
+                        signInCard
                     }
-                    .npCard()
 
                     SettingRow(icon: "mappin.and.ellipse", title: "Rayon", value: "Nərimanov")
                     SettingRow(icon: "globe", title: "Dil", value: "AZ / EN")
@@ -383,6 +520,143 @@ struct AccountView: View {
             }
             .background(Color.npBg)
             .navigationTitle("Hesab")
+        }
+    }
+
+    private var signInCard: some View {
+        VStack(spacing: 12) {
+            Image(systemName: "person.crop.circle.badge.checkmark")
+                .font(.system(size: 54))
+                .foregroundStyle(.npAccent2)
+            Text(awaitingCode ? "Kodu daxil et" : "E-poçt ilə daxil ol")
+                .font(.title3.weight(.heavy))
+            Text(awaitingCode
+                 ? "\(email) ünvanına 6 rəqəmli kod göndərdik."
+                 : "Hesabat vermək və pin əlavə etmək üçün e-poçtunuza 6 rəqəmli kod göndərəcəyik.")
+                .font(.subheadline)
+                .foregroundStyle(.npMuted)
+                .multilineTextAlignment(.center)
+
+            if !awaitingCode {
+                TextField("siz@example.com", text: $email)
+                    .textInputAutocapitalization(.never)
+                    .keyboardType(.emailAddress)
+                    .textContentType(.emailAddress)
+                    .autocorrectionDisabled(true)
+                    .padding(12)
+                    .background(Color.npSurface2, in: RoundedRectangle(cornerRadius: 12))
+                Button {
+                    Task { await sendCode() }
+                } label: {
+                    HStack {
+                        if sending { ProgressView().tint(.white) }
+                        Text("Kod göndər")
+                    }
+                }
+                .disabled(sending || !isValidEmail(email))
+                .buttonStyle(PrimaryButtonStyle())
+            } else {
+                TextField("123456", text: $code)
+                    .keyboardType(.numberPad)
+                    .textContentType(.oneTimeCode)
+                    .padding(12)
+                    .background(Color.npSurface2, in: RoundedRectangle(cornerRadius: 12))
+                    .font(.system(.title3, design: .monospaced).weight(.heavy))
+                    .multilineTextAlignment(.center)
+                Button {
+                    Task { await verify() }
+                } label: {
+                    HStack {
+                        if verifying { ProgressView().tint(.white) }
+                        Text("Təsdiqlə")
+                    }
+                }
+                .disabled(verifying || code.count < 6)
+                .buttonStyle(PrimaryButtonStyle())
+                Button("E-poçtu dəyiş") {
+                    awaitingCode = false
+                    code = ""
+                    status = nil
+                }
+                .font(.caption.weight(.semibold))
+                .foregroundStyle(.npMuted)
+            }
+
+            if let status {
+                Text(status.text)
+                    .font(.caption)
+                    .multilineTextAlignment(.center)
+                    .foregroundStyle(status.isError ? .npAccent2 : .npSuccess)
+                    .padding(.horizontal, 4)
+            }
+        }
+        .npCard()
+    }
+
+    private func signedInCard(session: AuthSession) -> some View {
+        VStack(spacing: 12) {
+            ZStack {
+                Circle()
+                    .fill(Color.npText)
+                    .frame(width: 64, height: 64)
+                Text(String(session.email.first ?? "?").uppercased())
+                    .font(.system(.title, design: .rounded).weight(.heavy))
+                    .foregroundStyle(.npBg)
+            }
+            Text(session.email)
+                .font(.headline)
+            Text("Resident")
+                .font(.caption.weight(.bold))
+                .foregroundStyle(.npMuted)
+                .textCase(.uppercase)
+            Button(role: .destructive) {
+                store.signOut()
+                email = ""
+                code = ""
+                awaitingCode = false
+                status = .info("Çıxış edildi")
+            } label: {
+                Label("Çıxış", systemImage: "rectangle.portrait.and.arrow.right")
+            }
+            .buttonStyle(SecondaryButtonStyle())
+        }
+        .npCard()
+    }
+
+    private func isValidEmail(_ s: String) -> Bool {
+        let trimmed = s.trimmingCharacters(in: .whitespacesAndNewlines)
+        return trimmed.contains("@") && trimmed.contains(".") && trimmed.count >= 5
+    }
+
+    @MainActor
+    private func sendCode() async {
+        sending = true
+        status = nil
+        defer { sending = false }
+        do {
+            try await store.sendOtp(email: email.trimmingCharacters(in: .whitespacesAndNewlines).lowercased())
+            awaitingCode = true
+            status = .info("Kod göndərildi. Poçtunuzu yoxlayın.")
+        } catch {
+            status = .error(error.localizedDescription)
+        }
+    }
+
+    @MainActor
+    private func verify() async {
+        verifying = true
+        status = nil
+        defer { verifying = false }
+        do {
+            try await store.verifyOtp(
+                email: email.trimmingCharacters(in: .whitespacesAndNewlines).lowercased(),
+                token: code.trimmingCharacters(in: .whitespacesAndNewlines)
+            )
+            UINotificationFeedbackGenerator().notificationOccurred(.success)
+            awaitingCode = false
+            code = ""
+        } catch {
+            status = .error(error.localizedDescription)
         }
     }
 }
@@ -739,6 +1013,9 @@ struct ReportWaitView: View {
     let summary: QueueSummary
     @Binding var minutes: Int
     @Environment(\.dismiss) private var dismiss
+    @Environment(AppStore.self) private var store
+    @State private var submitting = false
+    @State private var errorMessage: String?
 
     var body: some View {
         VStack(alignment: .leading, spacing: 22) {
@@ -752,15 +1029,53 @@ struct ReportWaitView: View {
                 .frame(maxWidth: .infinity)
             Slider(value: Binding(get: { Double(minutes) }, set: { minutes = Int($0) }), in: 0...120, step: 5)
                 .tint(.npAccent2)
-            Button("Göndər") {
-                UINotificationFeedbackGenerator().notificationOccurred(.success)
-                dismiss()
+
+            if store.session == nil {
+                Text("Hesabat vermək üçün Hesab tabından daxil olun.")
+                    .font(.footnote)
+                    .foregroundStyle(.npMuted)
+                    .padding(12)
+                    .frame(maxWidth: .infinity)
+                    .background(Color.npSurface2, in: RoundedRectangle(cornerRadius: 12))
             }
+            if let errorMessage {
+                Text(errorMessage)
+                    .font(.footnote.weight(.semibold))
+                    .foregroundStyle(.npAccent2)
+                    .padding(12)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .background(Color.npAccent.opacity(0.12), in: RoundedRectangle(cornerRadius: 12))
+            }
+
+            Button {
+                Task { await submit() }
+            } label: {
+                HStack {
+                    if submitting { ProgressView().tint(.white) }
+                    Text("Göndər")
+                }
+            }
+            .disabled(submitting || store.session == nil)
             .buttonStyle(PrimaryButtonStyle())
             Spacer()
         }
         .padding(20)
         .background(Color.npBg)
+    }
+
+    @MainActor
+    private func submit() async {
+        errorMessage = nil
+        submitting = true
+        defer { submitting = false }
+        do {
+            try await store.submitWait(locationId: summary.location.id, minutes: minutes)
+            UINotificationFeedbackGenerator().notificationOccurred(.success)
+            dismiss()
+        } catch {
+            UINotificationFeedbackGenerator().notificationOccurred(.error)
+            errorMessage = error.localizedDescription
+        }
     }
 }
 
@@ -834,30 +1149,205 @@ struct SafetyPinDetailView: View {
 }
 
 struct AddSafetyPinView: View {
+    let coordinate: CLLocationCoordinate2D
     @Environment(\.dismiss) private var dismiss
+    @Environment(AppStore.self) private var store
     @State private var category: SafetyCategory = .crossing
     @State private var description = ""
+    @State private var submitting = false
+    @State private var errorMessage: String?
 
     var body: some View {
         NavigationStack {
             Form {
-                Picker("Kateqoriya", selection: $category) {
-                    ForEach(SafetyCategory.allCases) { category in
-                        Label(category.label, systemImage: category.iconName).tag(category)
+                Section {
+                    Picker("Kateqoriya", selection: $category) {
+                        ForEach(SafetyCategory.allCases) { category in
+                            Label(category.label, systemImage: category.iconName).tag(category)
+                        }
+                    }
+                    TextField("Nə təhlükəlidir?", text: $description, axis: .vertical)
+                        .lineLimit(4, reservesSpace: true)
+                } header: {
+                    Text("Məlumat")
+                } footer: {
+                    Text("Yer: \(String(format: "%.4f", coordinate.latitude)), \(String(format: "%.4f", coordinate.longitude))")
+                        .foregroundStyle(.npMuted)
+                }
+
+                if store.session == nil {
+                    Section {
+                        Text("Pin əlavə etmək üçün Hesab tabından daxil olun.")
+                            .font(.footnote)
+                            .foregroundStyle(.npMuted)
                     }
                 }
-                TextField("Nə təhlükəlidir?", text: $description, axis: .vertical)
-                    .lineLimit(4, reservesSpace: true)
-                Button {
-                    UINotificationFeedbackGenerator().notificationOccurred(.success)
-                    dismiss()
-                } label: {
-                    Label("Pin əlavə et", systemImage: "paperplane.fill")
+
+                if let errorMessage {
+                    Section {
+                        Text(errorMessage)
+                            .font(.footnote.weight(.semibold))
+                            .foregroundStyle(.npAccent2)
+                    }
+                }
+
+                Section {
+                    Button {
+                        Task { await submit() }
+                    } label: {
+                        HStack {
+                            if submitting { ProgressView() }
+                            Label("Pin əlavə et", systemImage: "paperplane.fill")
+                        }
+                    }
+                    .disabled(submitting || store.session == nil)
                 }
             }
             .scrollContentBackground(.hidden)
             .background(Color.npBg)
             .navigationTitle("Yeni pin")
+            .toolbar {
+                ToolbarItem(placement: .topBarLeading) {
+                    Button("Ləğv et") { dismiss() }
+                }
+            }
+        }
+    }
+
+    @MainActor
+    private func submit() async {
+        errorMessage = nil
+        submitting = true
+        defer { submitting = false }
+        do {
+            try await store.submitPin(
+                lat: coordinate.latitude,
+                lng: coordinate.longitude,
+                category: category,
+                description: description
+            )
+            UINotificationFeedbackGenerator().notificationOccurred(.success)
+            dismiss()
+        } catch {
+            UINotificationFeedbackGenerator().notificationOccurred(.error)
+            errorMessage = error.localizedDescription
+        }
+    }
+}
+
+struct AddOutageView: View {
+    let coordinate: CLLocationCoordinate2D
+    @Environment(\.dismiss) private var dismiss
+    @Environment(AppStore.self) private var store
+    @State private var utility: Utility = .water
+    @State private var status: OutageStatus = .active
+    @State private var areaName: String = ""
+    @State private var radiusMeters: Double = 350
+    @State private var hasEta: Bool = true
+    @State private var estimatedEnd: Date = Date().addingTimeInterval(60 * 60 * 2)
+    @State private var description: String = ""
+    @State private var submitting = false
+    @State private var errorMessage: String?
+
+    var body: some View {
+        NavigationStack {
+            Form {
+                Section("Növ") {
+                    Picker("Növ", selection: $utility) {
+                        ForEach(Utility.allCases) { u in
+                            Label(u.label, systemImage: u.iconName).tag(u)
+                        }
+                    }
+                    .pickerStyle(.segmented)
+                    Picker("Status", selection: $status) {
+                        Text("Aktiv").tag(OutageStatus.active)
+                        Text("Planlı").tag(OutageStatus.planned)
+                    }
+                    .pickerStyle(.segmented)
+                }
+                Section("Yer") {
+                    TextField("Ərazi (məs: 8 Noyabr küç., 12-24)", text: $areaName)
+                    HStack {
+                        Text("Radius")
+                        Spacer()
+                        Text("\(Int(radiusMeters)) m")
+                            .foregroundStyle(.npMuted)
+                            .font(.system(.body, design: .monospaced))
+                    }
+                    Slider(value: $radiusMeters, in: 100...1500, step: 50)
+                        .tint(.npAccent2)
+                    Text("Koordinat: \(String(format: "%.4f", coordinate.latitude)), \(String(format: "%.4f", coordinate.longitude))")
+                        .font(.footnote)
+                        .foregroundStyle(.npMuted)
+                }
+                Section("Vaxt") {
+                    Toggle("Təxmini bitmə var", isOn: $hasEta)
+                    if hasEta {
+                        DatePicker("Bitmə", selection: $estimatedEnd, in: Date()...)
+                    }
+                }
+                Section("Təsvir") {
+                    TextField("Nə baş verir?", text: $description, axis: .vertical)
+                        .lineLimit(4, reservesSpace: true)
+                }
+                if store.session == nil {
+                    Section {
+                        Text("Daxil olmaq tələb olunur. Yalnız RİH admin hesabı kəsinti əlavə edə bilər (RLS qaydaları).")
+                            .font(.footnote)
+                            .foregroundStyle(.npMuted)
+                    }
+                }
+                if let errorMessage {
+                    Section {
+                        Text(errorMessage)
+                            .font(.footnote.weight(.semibold))
+                            .foregroundStyle(.npAccent2)
+                    }
+                }
+                Section {
+                    Button {
+                        Task { await submit() }
+                    } label: {
+                        HStack {
+                            if submitting { ProgressView() }
+                            Label("Kəsinti əlavə et", systemImage: "paperplane.fill")
+                        }
+                    }
+                    .disabled(submitting || store.session == nil || areaName.trimmingCharacters(in: .whitespaces).isEmpty)
+                }
+            }
+            .scrollContentBackground(.hidden)
+            .background(Color.npBg)
+            .navigationTitle("Yeni kəsinti")
+            .toolbar {
+                ToolbarItem(placement: .topBarLeading) {
+                    Button("Ləğv et") { dismiss() }
+                }
+            }
+        }
+    }
+
+    @MainActor
+    private func submit() async {
+        errorMessage = nil
+        submitting = true
+        defer { submitting = false }
+        do {
+            try await store.submitOutage(
+                utility: utility,
+                status: status,
+                areaName: areaName.trimmingCharacters(in: .whitespacesAndNewlines),
+                lat: coordinate.latitude,
+                lng: coordinate.longitude,
+                radiusM: Int(radiusMeters),
+                estimatedEnd: hasEta ? estimatedEnd : nil,
+                description: description
+            )
+            UINotificationFeedbackGenerator().notificationOccurred(.success)
+            dismiss()
+        } catch {
+            UINotificationFeedbackGenerator().notificationOccurred(.error)
+            errorMessage = error.localizedDescription
         }
     }
 }
@@ -1307,6 +1797,178 @@ actor NarPulseService {
             return fallback
         }
         return try decoder.decode([T].self, from: data)
+    }
+
+    // MARK: - Auth
+
+    func sendOtp(email: String) async throws {
+        guard let baseURL, !anonKey.isEmpty else { throw AppError.notConfigured }
+        let url = baseURL.appendingPathComponent("auth/v1/otp")
+        var req = URLRequest(url: url)
+        req.httpMethod = "POST"
+        req.setValue(anonKey, forHTTPHeaderField: "apikey")
+        req.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        let body: [String: Any] = ["email": email, "create_user": true]
+        req.httpBody = try JSONSerialization.data(withJSONObject: body)
+        let (data, response) = try await URLSession.shared.data(for: req)
+        guard let http = response as? HTTPURLResponse, (200..<300).contains(http.statusCode) else {
+            throw AppError.server(Self.errorMessage(from: data, fallback: "Kod göndərilmədi"))
+        }
+    }
+
+    func verifyOtp(email: String, token: String) async throws -> AuthSession {
+        guard let baseURL, !anonKey.isEmpty else { throw AppError.notConfigured }
+        let url = baseURL.appendingPathComponent("auth/v1/verify")
+        var req = URLRequest(url: url)
+        req.httpMethod = "POST"
+        req.setValue(anonKey, forHTTPHeaderField: "apikey")
+        req.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        let body: [String: Any] = ["email": email, "token": token, "type": "email"]
+        req.httpBody = try JSONSerialization.data(withJSONObject: body)
+        let (data, response) = try await URLSession.shared.data(for: req)
+        guard let http = response as? HTTPURLResponse, (200..<300).contains(http.statusCode) else {
+            throw AppError.server(Self.errorMessage(from: data, fallback: "Kod yanlışdır"))
+        }
+        struct VerifyResponse: Decodable {
+            let access_token: String
+            let refresh_token: String?
+            let user: VerifyUser
+        }
+        struct VerifyUser: Decodable {
+            let id: String
+            let email: String?
+        }
+        let decoded = try JSONDecoder().decode(VerifyResponse.self, from: data)
+        return AuthSession(
+            accessToken: decoded.access_token,
+            refreshToken: decoded.refresh_token,
+            userId: decoded.user.id,
+            email: decoded.user.email ?? email
+        )
+    }
+
+    // MARK: - Writes
+
+    func submitWait(session: AuthSession, locationId: UUID, minutes: Int) async throws -> WaitCheckin {
+        guard let baseURL, !anonKey.isEmpty else { throw AppError.notConfigured }
+        let url = baseURL.appendingPathComponent("rest/v1/wait_checkins")
+        var req = URLRequest(url: url)
+        req.httpMethod = "POST"
+        req.setValue(anonKey, forHTTPHeaderField: "apikey")
+        req.setValue("Bearer \(session.accessToken)", forHTTPHeaderField: "Authorization")
+        req.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        req.setValue("return=representation", forHTTPHeaderField: "Prefer")
+        let body: [String: Any] = [
+            "location_id": locationId.uuidString.lowercased(),
+            "wait_minutes": minutes,
+            "user_id": session.userId
+        ]
+        req.httpBody = try JSONSerialization.data(withJSONObject: body)
+        let (data, response) = try await URLSession.shared.data(for: req)
+        guard let http = response as? HTTPURLResponse, (200..<300).contains(http.statusCode) else {
+            throw AppError.server(Self.errorMessage(from: data, fallback: "Hesabat saxlanmadı"))
+        }
+        let arr = try decoder.decode([WaitCheckin].self, from: data)
+        guard let first = arr.first else { throw AppError.server("Boş cavab") }
+        return first
+    }
+
+    func submitOutage(
+        session: AuthSession,
+        utility: Utility,
+        status: OutageStatus,
+        areaName: String,
+        lat: Double,
+        lng: Double,
+        radiusM: Int,
+        estimatedEnd: Date?,
+        description: String
+    ) async throws -> Outage {
+        guard let baseURL, !anonKey.isEmpty else { throw AppError.notConfigured }
+        let url = baseURL.appendingPathComponent("rest/v1/outages")
+        var req = URLRequest(url: url)
+        req.httpMethod = "POST"
+        req.setValue(anonKey, forHTTPHeaderField: "apikey")
+        req.setValue("Bearer \(session.accessToken)", forHTTPHeaderField: "Authorization")
+        req.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        req.setValue("return=representation", forHTTPHeaderField: "Prefer")
+        var body: [String: Any] = [
+            "utility": utility.rawValue,
+            "status": status.rawValue,
+            "area_name": areaName,
+            "center_lat": lat,
+            "center_lng": lng,
+            "radius_m": radiusM,
+            "source": "manual"
+        ]
+        if let estimatedEnd {
+            body["estimated_end"] = ISO8601DateFormatter.standard.string(from: estimatedEnd)
+        }
+        if !description.isEmpty {
+            body["description"] = description
+        }
+        req.httpBody = try JSONSerialization.data(withJSONObject: body)
+        let (data, response) = try await URLSession.shared.data(for: req)
+        guard let http = response as? HTTPURLResponse, (200..<300).contains(http.statusCode) else {
+            let raw = Self.errorMessage(from: data, fallback: "Kəsinti saxlanmadı")
+            // RLS rejects non-admins with a row-level violation. Map to a friendly hint.
+            if raw.localizedCaseInsensitiveContains("row-level") ||
+               raw.localizedCaseInsensitiveContains("policy") ||
+               raw.localizedCaseInsensitiveContains("403") {
+                throw AppError.server("Yalnız RİH admin hesabı kəsinti əlavə edə bilər.")
+            }
+            throw AppError.server(raw)
+        }
+        let arr = try decoder.decode([Outage].self, from: data)
+        guard let first = arr.first else { throw AppError.server("Boş cavab") }
+        return first
+    }
+
+    func submitPin(
+        session: AuthSession,
+        lat: Double,
+        lng: Double,
+        category: SafetyCategory,
+        description: String
+    ) async throws -> SafetyPin {
+        guard let baseURL, !anonKey.isEmpty else { throw AppError.notConfigured }
+        let url = baseURL.appendingPathComponent("rest/v1/safety_pins")
+        var req = URLRequest(url: url)
+        req.httpMethod = "POST"
+        req.setValue(anonKey, forHTTPHeaderField: "apikey")
+        req.setValue("Bearer \(session.accessToken)", forHTTPHeaderField: "Authorization")
+        req.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        req.setValue("return=representation", forHTTPHeaderField: "Prefer")
+        var body: [String: Any] = [
+            "lat": lat,
+            "lng": lng,
+            "category": category.rawValue,
+            "user_id": session.userId
+        ]
+        if !description.isEmpty {
+            body["description"] = description
+        }
+        req.httpBody = try JSONSerialization.data(withJSONObject: body)
+        let (data, response) = try await URLSession.shared.data(for: req)
+        guard let http = response as? HTTPURLResponse, (200..<300).contains(http.statusCode) else {
+            throw AppError.server(Self.errorMessage(from: data, fallback: "Pin saxlanmadı"))
+        }
+        let arr = try decoder.decode([SafetyPin].self, from: data)
+        guard let first = arr.first else { throw AppError.server("Boş cavab") }
+        return first
+    }
+
+    private static func errorMessage(from data: Data, fallback: String) -> String {
+        if let obj = try? JSONSerialization.jsonObject(with: data) as? [String: Any] {
+            if let msg = obj["msg"] as? String { return msg }
+            if let msg = obj["message"] as? String { return msg }
+            if let err = obj["error_description"] as? String { return err }
+            if let err = obj["error"] as? String { return err }
+        }
+        if let text = String(data: data, encoding: .utf8), !text.isEmpty {
+            return text.prefix(160).description
+        }
+        return fallback
     }
 }
 
