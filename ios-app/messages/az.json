@@ -1,0 +1,76 @@
+{
+  "brand": "NarPulse",
+  "tagline": "Rayonun nəbzi",
+  "tabs": {
+    "outages": "Kəsintilər",
+    "queues": "Növbələr",
+    "safety": "Təhlükəsizlik",
+    "account": "Hesab"
+  },
+  "common": {
+    "loading": "Yüklənir…",
+    "retry": "Yenidən cəhd et",
+    "submit": "Göndər",
+    "cancel": "Ləğv et",
+    "close": "Bağla",
+    "minute": "dəq",
+    "now": "indi",
+    "loginRequired": "Bunun üçün daxil olun",
+    "thanks": "Təşəkkürlər!",
+    "report": "Hesabat ver",
+    "addPin": "Pin əlavə et"
+  },
+  "outages": {
+    "title": "Kəsintilər",
+    "subtitle": "Nərimanov rayonu üzrə aktiv və planlı",
+    "active": "Aktiv",
+    "planned": "Planlı",
+    "resolved": "Həll edildi",
+    "water": "Su",
+    "electric": "İşıq",
+    "gas": "Qaz",
+    "all": "Hamısı",
+    "noActive": "Hazırda aktiv kəsinti yoxdur",
+    "eta": "Təxmini bitmə"
+  },
+  "queues": {
+    "title": "Növbələr",
+    "subtitle": "Xidmət məntəqələrində gözləmə",
+    "noReport": "hesabat yox",
+    "reportTitle": "Gözləmə müddətini bildir",
+    "median": "median son 1 saat"
+  },
+  "safety": {
+    "title": "Təhlükəsizlik",
+    "subtitle": "Təhlükəli nöqtələri xəritədə işarələ",
+    "category": "Kateqoriya",
+    "description": "Təsvir",
+    "descPlaceholder": "Nəyi gördünüz? Nə təhlükəlidir?",
+    "photo": "Şəkil (istəyə bağlı)",
+    "pickPhoto": "Şəkil seç",
+    "crossing": "Piyada keçidi",
+    "lighting": "İşıqlandırma",
+    "traffic": "Nəqliyyat",
+    "sidewalk": "Səki",
+    "other": "Digər",
+    "upvote": "Mən də gördüm",
+    "voted": "Səs verdiniz",
+    "votes": "səs",
+    "newPin": "Yeni pin",
+    "tapMap": "Xəritədə bir nöqtəyə toxun",
+    "saved": "Pin əlavə edildi"
+  },
+  "auth": {
+    "title": "Daxil ol",
+    "subtitle": "E-poçtunuza giriş kodu göndərəcəyik",
+    "email": "E-poçt",
+    "emailPlaceholder": "siz@example.com",
+    "send": "Kod göndər",
+    "codeLabel": "6 rəqəmli kod",
+    "verify": "Təsdiqlə",
+    "sent": "Kod göndərildi",
+    "tryAgain": "Yenidən cəhd et",
+    "signOut": "Çıxış",
+    "admin": "Admin"
+  }
+}

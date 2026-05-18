@@ -1,0 +1,76 @@
+{
+  "brand": "NarPulse",
+  "tagline": "The district's pulse",
+  "tabs": {
+    "outages": "Outages",
+    "queues": "Queues",
+    "safety": "Safety",
+    "account": "Account"
+  },
+  "common": {
+    "loading": "Loading…",
+    "retry": "Try again",
+    "submit": "Submit",
+    "cancel": "Cancel",
+    "close": "Close",
+    "minute": "min",
+    "now": "now",
+    "loginRequired": "Sign in to do this",
+    "thanks": "Thanks!",
+    "report": "Report wait",
+    "addPin": "Add pin"
+  },
+  "outages": {
+    "title": "Outages",
+    "subtitle": "Active and planned in Nərimanov",
+    "active": "Active",
+    "planned": "Planned",
+    "resolved": "Resolved",
+    "water": "Water",
+    "electric": "Electricity",
+    "gas": "Gas",
+    "all": "All",
+    "noActive": "No active outages right now",
+    "eta": "ETA"
+  },
+  "queues": {
+    "title": "Queues",
+    "subtitle": "Wait times at service locations",
+    "noReport": "no report",
+    "reportTitle": "Report your wait",
+    "median": "median over the last hour"
+  },
+  "safety": {
+    "title": "Safety",
+    "subtitle": "Flag unsafe spots on the map",
+    "category": "Category",
+    "description": "Description",
+    "descPlaceholder": "What did you see? What's unsafe?",
+    "photo": "Photo (optional)",
+    "pickPhoto": "Pick a photo",
+    "crossing": "Crossing",
+    "lighting": "Lighting",
+    "traffic": "Traffic",
+    "sidewalk": "Sidewalk",
+    "other": "Other",
+    "upvote": "I saw it too",
+    "voted": "You voted",
+    "votes": "votes",
+    "newPin": "New pin",
+    "tapMap": "Tap a point on the map",
+    "saved": "Pin added"
+  },
+  "auth": {
+    "title": "Sign in",
+    "subtitle": "We'll email you a 6-digit code",
+    "email": "Email",
+    "emailPlaceholder": "you@example.com",
+    "send": "Send code",
+    "codeLabel": "6-digit code",
+    "verify": "Verify",
+    "sent": "Code sent",
+    "tryAgain": "Try again",
+    "signOut": "Sign out",
+    "admin": "Admin"
+  }
+}

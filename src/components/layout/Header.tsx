@@ -6,6 +6,7 @@ import { useState } from "react";
 import { Link, usePathname } from "@/i18n/navigation";
 import Logo from "@/components/brand/Logo";
 import LocaleSwitcher from "./LocaleSwitcher";
+import UserMenu from "./UserMenu";
 import { cn } from "@/lib/utils";
 
 const NAV = [
@@ -53,13 +54,7 @@ export default function Header() {
 
         <div className="flex items-center gap-3">
           <LocaleSwitcher />
-          <Link
-            href="/giris"
-            className="hidden sm:inline-flex items-center gap-1.5 h-9 px-3 rounded-lg text-sm font-semibold border border-[var(--border)] text-[var(--text)] bg-white hover:bg-[var(--surface-2)] transition-colors"
-          >
-            <LogIn className="h-3.5 w-3.5" />
-            {t("login")}
-          </Link>
+          <UserMenu />
           <button
             className="md:hidden p-2 -mr-2"
             onClick={() => setOpen((o) => !o)}

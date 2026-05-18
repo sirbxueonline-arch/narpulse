@@ -1,0 +1,27 @@
+"app.tagline" = "Rayonun nəbzi";
+"tab.home" = "Əsas";
+"tab.outages" = "Kəsintilər";
+"tab.waits" = "Növbələr";
+"tab.safety" = "Təhlükəsizlik";
+"tab.account" = "Hesab";
+
+"outage.active" = "Aktiv";
+"outage.planned" = "Planlı";
+"outage.resolved" = "Həll edildi";
+"outage.utility.water" = "Su";
+"outage.utility.electricity" = "İşıq";
+"outage.utility.gas" = "Qaz";
+
+"wait.report" = "Hesabat ver";
+"wait.no_reports" = "Hesabat yoxdur";
+"wait.minutes" = "%d dəq";
+
+"safety.add_pin" = "Pin əlavə et";
+"safety.category.crossing" = "Piyada keçidi";
+"safety.category.lighting" = "İşıqlandırma";
+"safety.category.traffic" = "Nəqliyyat";
+"safety.category.sidewalk" = "Səki";
+"safety.category.other" = "Digər";
+
+"account.signin" = "Daxil ol";
+"account.signout" = "Çıxış";

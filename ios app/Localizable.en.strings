@@ -1,0 +1,27 @@
+"app.tagline" = "The district's pulse";
+"tab.home" = "Home";
+"tab.outages" = "Outages";
+"tab.waits" = "Queues";
+"tab.safety" = "Safety";
+"tab.account" = "Account";
+
+"outage.active" = "Active";
+"outage.planned" = "Planned";
+"outage.resolved" = "Resolved";
+"outage.utility.water" = "Water";
+"outage.utility.electricity" = "Electricity";
+"outage.utility.gas" = "Gas";
+
+"wait.report" = "Report wait";
+"wait.no_reports" = "No reports yet";
+"wait.minutes" = "%d min";
+
+"safety.add_pin" = "Drop a pin";
+"safety.category.crossing" = "Crossing";
+"safety.category.lighting" = "Lighting";
+"safety.category.traffic" = "Traffic";
+"safety.category.sidewalk" = "Sidewalk";
+"safety.category.other" = "Other";
+
+"account.signin" = "Sign in";
+"account.signout" = "Sign out";

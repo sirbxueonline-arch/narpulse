@@ -1,0 +1,410 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>NarPulse iOS — Build Brief</title>
+<style>
+  :root {
+    --bg: #0A0E1A;
+    --surface: #11172A;
+    --surface-2: #1A2138;
+    --border: #252D45;
+    --text: #F5F5F0;
+    --muted: #8B93A8;
+    --accent: #C8102E;
+    --accent-2: #E63950;
+    --success: #3FB68B;
+    --warning: #F2B441;
+    --mono: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+    --sans: -apple-system, BlinkMacSystemFont, "Inter", "Manrope", system-ui, sans-serif;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; background: var(--bg); color: var(--text); font-family: var(--sans); line-height: 1.6; }
+  body { padding: 56px 24px 96px; }
+  .wrap { max-width: 880px; margin: 0 auto; }
+  header.hero {
+    border: 1px solid var(--border);
+    border-radius: 16px;
+    padding: 36px 32px;
+    background: linear-gradient(135deg, var(--surface), var(--surface-2));
+    margin-bottom: 40px;
+  }
+  .brand {
+    display: flex; align-items: center; gap: 12px; margin-bottom: 16px;
+    font-weight: 700; letter-spacing: -0.01em;
+  }
+  .brand svg { width: 28px; height: 28px; }
+  .brand-name { font-size: 18px; }
+  .brand-name .accent { color: var(--accent); }
+  h1 {
+    font-size: 38px; line-height: 1.15; margin: 0 0 12px;
+    font-weight: 800; letter-spacing: -0.02em;
+  }
+  h2 {
+    font-size: 22px; margin: 48px 0 16px;
+    font-weight: 700; letter-spacing: -0.01em;
+    padding-bottom: 10px; border-bottom: 1px solid var(--border);
+  }
+  h3 {
+    font-size: 16px; margin: 28px 0 10px;
+    font-weight: 600; color: var(--text);
+  }
+  .lede { color: var(--muted); font-size: 17px; max-width: 56ch; }
+  p { color: var(--text); }
+  ul, ol { padding-left: 22px; }
+  li { margin: 6px 0; }
+  code {
+    font-family: var(--mono); font-size: 13.5px;
+    background: var(--surface); border: 1px solid var(--border);
+    padding: 1px 6px; border-radius: 6px; color: #ffd6dc;
+  }
+  pre {
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: 12px; padding: 16px 18px; overflow-x: auto;
+    font-family: var(--mono); font-size: 13px; line-height: 1.55;
+    color: #e8ecf8;
+  }
+  pre code { background: transparent; border: 0; padding: 0; color: inherit; }
+  table { width: 100%; border-collapse: collapse; margin: 12px 0; font-size: 14.5px; }
+  th, td { text-align: left; padding: 10px 12px; border-bottom: 1px solid var(--border); }
+  th { color: var(--muted); font-weight: 600; }
+  .pill {
+    display: inline-block; padding: 2px 10px; border-radius: 999px;
+    background: rgba(200,16,46,0.12); color: var(--accent-2);
+    font-size: 12px; font-weight: 600; letter-spacing: 0.02em;
+    border: 1px solid rgba(200,16,46,0.3);
+  }
+  .grid-2 {
+    display: grid; grid-template-columns: 1fr 1fr; gap: 16px;
+  }
+  @media (max-width: 720px) { .grid-2 { grid-template-columns: 1fr; } }
+  .card {
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: 12px; padding: 18px 20px;
+  }
+  .card h3 { margin-top: 0; }
+  .muted { color: var(--muted); }
+  .accent { color: var(--accent-2); }
+  hr { border: 0; border-top: 1px solid var(--border); margin: 40px 0; }
+  .phase {
+    border-left: 3px solid var(--accent);
+    padding: 4px 0 4px 18px;
+    margin: 18px 0;
+  }
+  .phase-title { font-weight: 700; }
+  .phase-time { color: var(--muted); font-size: 13px; margin-left: 8px; }
+  a { color: var(--accent-2); }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<header class="hero">
+  <div class="brand">
+    <svg viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+      <path d="M16 4c-1 2-3 3-3 6 0 1 .3 1.8.8 2.5C10.5 13.5 8 16.5 8 20c0 4.4 3.6 8 8 8s8-3.6 8-8c0-3.5-2.5-6.5-5.8-7.5.5-.7.8-1.5.8-2.5 0-3-2-4-3-6z" fill="#C8102E"/>
+      <path d="M3 20 L10 20 L12 16 L15 24 L18 18 L21 21 L29 20" stroke="#F5F5F0" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" fill="none"/>
+    </svg>
+    <span class="brand-name"><span class="accent">Nar</span>Pulse</span>
+    <span class="pill">iOS Build Brief</span>
+  </div>
+  <h1>NarPulse — iOS companion app</h1>
+  <p class="lede">
+    Native SwiftUI app for residents of the Nərimanov district of Baku. Reads from the same Supabase backend as the web app. Built for the Openwave hackathon — judges will see this side-by-side with the web demo, so it must feel native and polished, not like a wrapper.
+  </p>
+</header>
+
+<h2>Read this first</h2>
+<ul>
+  <li>The <strong>web app</strong> is the primary demo. It has the RİH admin dashboard. Do not duplicate the admin surface on iOS — this app is <strong>resident-only</strong>.</li>
+  <li>Backend is already built. You consume it. Do not create new tables or modify the schema without confirming first.</li>
+  <li>Default language is <strong>Azerbaijani</strong>. English is secondary. All strings go through <code>Localizable.strings</code> in <code>az</code> and <code>en</code> bundles.</li>
+  <li>Target: <strong>iOS 17+</strong>, SwiftUI only, no UIKit unless wrapping <code>MKMapView</code>.</li>
+  <li>Demo device: judge will hold an iPhone. Test on a real phone, not just the simulator.</li>
+</ul>
+
+<h2>Stack</h2>
+<table>
+  <tr><th>Layer</th><th>Choice</th><th>Notes</th></tr>
+  <tr><td>UI</td><td>SwiftUI</td><td>iOS 17+ APIs OK (<code>@Observable</code>, new <code>NavigationStack</code>)</td></tr>
+  <tr><td>Maps</td><td>MapKit (<code>Map</code> SwiftUI)</td><td>Native, no API key, gorgeous on device</td></tr>
+  <tr><td>Backend</td><td><code>supabase-swift</code></td><td>Auth, Postgres, Realtime, Storage all in one SDK</td></tr>
+  <tr><td>Auth</td><td>Supabase magic link</td><td>Deep link back into the app via Universal Links</td></tr>
+  <tr><td>Networking</td><td>URLSession via SDK</td><td>No Alamofire</td></tr>
+  <tr><td>Images</td><td>AsyncImage + NSCache</td><td>For safety-pin photos from Supabase Storage</td></tr>
+  <tr><td>Notifications</td><td>APNs via Supabase Edge Function</td><td>Stretch goal — only if Phase 5 finishes early</td></tr>
+</table>
+
+<h2>Backend — Supabase</h2>
+<p>Use the same project as the web app. Get the URL and anon key from <code>.env.local</code> of the web repo. Store them in <code>Config.xcconfig</code>, never in source.</p>
+
+<h3>Tables you will read</h3>
+<table>
+  <tr><th>Table</th><th>Purpose</th><th>Access</th></tr>
+  <tr><td><code>outages</code></td><td>Active utility cutoffs</td><td>Read (anonymous OK)</td></tr>
+  <tr><td><code>service_locations</code></td><td>ASAN, polyclinics, etc.</td><td>Read (anonymous OK)</td></tr>
+  <tr><td><code>wait_checkins</code></td><td>Wait-time reports</td><td>Read public, insert requires auth</td></tr>
+  <tr><td><code>safety_pins</code></td><td>Dangerous-spot pins</td><td>Read public, insert requires auth</td></tr>
+  <tr><td><code>pin_votes</code></td><td>Upvotes on pins</td><td>Insert/delete only by owner</td></tr>
+  <tr><td><code>profiles</code></td><td>User profile + role</td><td>Read own only</td></tr>
+</table>
+
+<h3>Schema reference (do not modify)</h3>
+<pre><code>outages
+  id uuid · utility text(water|electricity|gas) · status text(planned|active|resolved)
+  area_name text · center_lat float · center_lng float · radius_m int
+  started_at timestamptz · estimated_end timestamptz · resolved_at timestamptz
+  source text · source_url text · description text
+
+service_locations
+  id uuid · name text · kind text(asan|poliklinika|post|rih|bank)
+  lat float · lng float · address text · opens_at time · closes_at time
+
+wait_checkins
+  id uuid · location_id uuid · user_id uuid
+  wait_minutes int(0-240) · reported_at timestamptz
+
+safety_pins
+  id uuid · user_id uuid · lat float · lng float
+  category text(crossing|lighting|traffic|sidewalk|other)
+  description text · photo_url text · upvotes int
+  status text(pending|reviewed|resolved) · created_at timestamptz</code></pre>
+
+<h3>Storage</h3>
+<p>Bucket <code>safety-photos</code> is public-read, auth-write. Upload paths follow <code>{user_id}/{uuid}.jpg</code>. Compress to max 1600px wide, JPEG quality 0.7 before upload.</p>
+
+<h3>Realtime</h3>
+<p>Subscribe to <code>postgres_changes</code> on the <code>outages</code> table. On <code>INSERT</code> with <code>status = 'active'</code> within the user's saved district (Nərimanov), surface a banner + (if Phase 5 ships) a local notification.</p>
+
+<h2>Brand tokens</h2>
+<p>Mirror the web app exactly. Create <code>Theme.swift</code>:</p>
+<pre><code>extension Color {
+    static let np_bg        = Color(red: 0.039, green: 0.055, blue: 0.102) // #0A0E1A
+    static let np_surface   = Color(red: 0.067, green: 0.090, blue: 0.165) // #11172A
+    static let np_surface2  = Color(red: 0.102, green: 0.129, blue: 0.220) // #1A2138
+    static let np_border    = Color(red: 0.145, green: 0.176, blue: 0.271) // #252D45
+    static let np_text      = Color(red: 0.961, green: 0.961, blue: 0.941) // #F5F5F0
+    static let np_muted     = Color(red: 0.545, green: 0.576, blue: 0.659) // #8B93A8
+    static let np_accent    = Color(red: 0.784, green: 0.063, blue: 0.180) // #C8102E
+    static let np_accent2   = Color(red: 0.902, green: 0.224, blue: 0.314) // #E63950
+    static let np_success   = Color(red: 0.247, green: 0.714, blue: 0.545) // #3FB68B
+    static let np_warning   = Color(red: 0.949, green: 0.706, blue: 0.255) // #F2B441
+}</code></pre>
+<p>Force dark scheme app-wide (<code>.preferredColorScheme(.dark)</code>). Use SF Pro Rounded for headings, SF Pro Text for body.</p>
+
+<h2>Screens</h2>
+
+<div class="grid-2">
+  <div class="card">
+    <h3>1. Home (tabbed root)</h3>
+    <p>Top: greeting + district name + live count of active outages in Nərimanov.<br>
+    Below: three large tiles — <em>Kəsintilər</em>, <em>Növbələr</em>, <em>Təhlükəsizlik</em> — each with icon, count badge, last-updated timestamp.</p>
+  </div>
+  <div class="card">
+    <h3>2. Outages (Kəsintilər)</h3>
+    <p>Map at top half, list below (or full-map mode toggleable). Pulsing red annotation for active, amber for planned. Tap → detail sheet: area, utility, start time, ETA, description, "Hesabat səhvdir" report button.</p>
+  </div>
+  <div class="card">
+    <h3>3. Wait times (Növbələr)</h3>
+    <p>List of service locations sorted by distance. Each row: name, kind icon, current estimated wait (median of last hour), "Hesabat ver" button. Detail screen: history chart + report sheet with a slider.</p>
+  </div>
+  <div class="card">
+    <h3>4. Safety (Təhlükəsizlik)</h3>
+    <p>Map of pins + FAB to drop a new pin. Tap the FAB → camera/photo picker → category → description → confirm location → submit. Detail: photo, description, upvote button.</p>
+  </div>
+  <div class="card">
+    <h3>5. Account</h3>
+    <p>Sign in with magic link (email), language toggle (AZ/EN), district selector (locked to Nərimanov for v1, prepped for expansion), notifications toggle, "Haqqında" link.</p>
+  </div>
+  <div class="card">
+    <h3>6. Onboarding (first launch)</h3>
+    <p>Three swipeable cards explaining the three features, last card has location permission prompt + "Başla" button. Skip allowed.</p>
+  </div>
+</div>
+
+<h2>Architecture</h2>
+<pre><code>NarPulse/
+├── App/
+│   └── NarPulseApp.swift          // @main, supabase client init
+├── Core/
+│   ├── Theme.swift
+│   ├── SupabaseClient.swift       // shared SupabaseClient
+│   ├── Localization.swift         // String+Localized helpers
+│   └── Models/                    // Outage, ServiceLocation, WaitCheckin, SafetyPin
+├── Features/
+│   ├── Home/HomeView.swift
+│   ├── Outages/
+│   │   ├── OutagesView.swift
+│   │   ├── OutagesViewModel.swift   // @Observable
+│   │   ├── OutageDetailSheet.swift
+│   │   └── OutageAnnotation.swift
+│   ├── WaitTimes/...
+│   ├── Safety/...
+│   └── Account/...
+├── Services/
+│   ├── OutageService.swift
+│   ├── WaitTimeService.swift
+│   ├── SafetyPinService.swift
+│   └── RealtimeService.swift
+└── Resources/
+    ├── az.lproj/Localizable.strings
+    └── en.lproj/Localizable.strings</code></pre>
+
+<p>Use <code>@Observable</code> (iOS 17 Observation framework) for view models. Each service is an actor that owns its Supabase queries.</p>
+
+<h2>Model examples</h2>
+<pre><code>struct Outage: Identifiable, Codable, Hashable {
+    let id: UUID
+    let utility: Utility
+    let status: OutageStatus
+    let areaName: String
+    let centerLat: Double
+    let centerLng: Double
+    let radiusM: Int
+    let startedAt: Date
+    let estimatedEnd: Date?
+    let description: String?
+
+    enum Utility: String, Codable { case water, electricity, gas }
+    enum OutageStatus: String, Codable { case planned, active, resolved }
+}
+
+extension Outage {
+    var coordinate: CLLocationCoordinate2D {
+        .init(latitude: centerLat, longitude: centerLng)
+    }
+    var iconName: String {
+        switch utility {
+        case .water: "drop.fill"
+        case .electricity: "bolt.fill"
+        case .gas: "flame.fill"
+        }
+    }
+}</code></pre>
+
+<h2>Localization seed</h2>
+<p>Drop these into <code>az.lproj/Localizable.strings</code> first, expand as needed:</p>
+<pre><code>"app.tagline" = "Rayonun nəbzi";
+"tab.outages" = "Kəsintilər";
+"tab.waits"   = "Növbələr";
+"tab.safety"  = "Təhlükəsizlik";
+"tab.account" = "Hesab";
+
+"outage.active"   = "Aktiv";
+"outage.planned"  = "Planlı";
+"outage.resolved" = "Həll edildi";
+"outage.utility.water"       = "Su";
+"outage.utility.electricity" = "İşıq";
+"outage.utility.gas"         = "Qaz";
+
+"wait.report"      = "Hesabat ver";
+"wait.no_reports"  = "Hesabat yoxdur";
+"wait.minutes"     = "%d dəq";
+
+"safety.add_pin"   = "Pin əlavə et";
+"safety.category.crossing"  = "Piyada keçidi";
+"safety.category.lighting"  = "İşıqlandırma";
+"safety.category.traffic"   = "Nəqliyyat";
+"safety.category.sidewalk"  = "Səki";
+"safety.category.other"     = "Digər";
+
+"account.signin"   = "Daxil ol";
+"account.signout"  = "Çıxış";</code></pre>
+
+<h2>Build phases</h2>
+
+<div class="phase">
+  <span class="phase-title">Phase 1 — Project setup</span><span class="phase-time">45 min</span>
+  <ul>
+    <li>New Xcode project, iOS 17, SwiftUI app lifecycle, app name <em>NarPulse</em>, bundle id <code>io.narpulse.ios</code>.</li>
+    <li>Add Swift Package: <code>https://github.com/supabase/supabase-swift</code>.</li>
+    <li>Create <code>Theme.swift</code>, force dark mode in <code>NarPulseApp</code>.</li>
+    <li><code>Config.xcconfig</code> with Supabase URL + anon key; surface via <code>Info.plist</code>.</li>
+    <li>Stub four tabs in a <code>TabView</code>.</li>
+  </ul>
+</div>
+
+<div class="phase">
+  <span class="phase-title">Phase 2 — Auth + models</span><span class="phase-time">30 min</span>
+  <ul>
+    <li>Define all four models with <code>Codable</code> + <code>snake_case</code> decoding.</li>
+    <li>Magic-link sign-in screen. Universal Link callback returns to the app and completes auth.</li>
+    <li>Account tab shows email when signed in.</li>
+  </ul>
+</div>
+
+<div class="phase">
+  <span class="phase-title">Phase 3 — Outages (the hero)</span><span class="phase-time">2 h</span>
+  <ul>
+    <li><code>OutageService.fetchActive()</code> + <code>subscribeRealtime()</code>.</li>
+    <li>SwiftUI <code>Map</code> with custom annotations. Pulsing red animation via <code>TimelineView</code> + <code>scaleEffect</code> + <code>opacity</code>.</li>
+    <li>Bottom sheet (<code>.sheet</code> with detents <code>.medium</code>, <code>.large</code>) listing outages.</li>
+    <li>Tap annotation → detail sheet.</li>
+    <li>Filter chips at the top: All / Water / Electricity / Gas.</li>
+  </ul>
+</div>
+
+<div class="phase">
+  <span class="phase-title">Phase 4 — Wait times</span><span class="phase-time">1.5 h</span>
+  <ul>
+    <li>Fetch service locations + last-hour check-ins; compute median per location.</li>
+    <li>Sort by user distance (request "When in use" location permission with a real <code>NSLocationWhenInUseUsageDescription</code> string in AZ).</li>
+    <li>Report-wait sheet with slider (0–120 min, 5 min steps).</li>
+  </ul>
+</div>
+
+<div class="phase">
+  <span class="phase-title">Phase 5 — Safety pins</span><span class="phase-time">2 h</span>
+  <ul>
+    <li>Map of existing pins, FAB → flow: photo (PhotosPicker + camera) → category → description → confirm location (draggable annotation) → submit.</li>
+    <li>Upload photo to <code>safety-photos</code> bucket, store returned URL in <code>safety_pins.photo_url</code>.</li>
+    <li>Detail view with upvote (insert/delete in <code>pin_votes</code>, refresh count).</li>
+  </ul>
+</div>
+
+<div class="phase">
+  <span class="phase-title">Phase 6 — Onboarding + polish</span><span class="phase-time">1.5 h</span>
+  <ul>
+    <li>3-card onboarding via <code>TabView</code> + <code>PageTabViewStyle</code>.</li>
+    <li>Empty states, loading skeletons (use <code>.redacted(reason: .placeholder)</code>).</li>
+    <li>Haptics on report submit + pin drop (<code>UINotificationFeedbackGenerator</code>).</li>
+    <li>Launch screen with the pomegranate mark.</li>
+  </ul>
+</div>
+
+<div class="phase">
+  <span class="phase-title">Phase 7 — Stretch: push notifications</span><span class="phase-time">only if time</span>
+  <ul>
+    <li>Supabase Edge Function triggers on new active outage, sends APNs via Apple's HTTP/2 API.</li>
+    <li>Device token registered on first sign-in.</li>
+    <li>Notification tap deep-links to the outage detail.</li>
+  </ul>
+</div>
+
+<h2>Quality bar</h2>
+<ul>
+  <li><strong>Real Azerbaijani everywhere.</strong> No machine translation. If unsure, leave the key and ask.</li>
+  <li><strong>Mobile-perfect.</strong> Test on iPhone SE (smallest) and iPhone 15 Pro Max. Map must work in both orientations.</li>
+  <li><strong>Offline resilience.</strong> Cache the last successful outage fetch; show it with a "Bağlantı yoxdur — son yenilənmə X dəq əvvəl" banner if the network drops.</li>
+  <li><strong>Privacy.</strong> Add <code>NSLocationWhenInUseUsageDescription</code>, <code>NSCameraUsageDescription</code>, <code>NSPhotoLibraryUsageDescription</code> — all in Azerbaijani, all explaining the real reason.</li>
+  <li><strong>No third-party analytics.</strong> Not for v1. Privacy is part of the pitch.</li>
+</ul>
+
+<h2>Deliverables at the end</h2>
+<ul>
+  <li>Working app installed on a physical iPhone, signed with a free Apple ID for demo.</li>
+  <li>Short README with: prerequisites, how to set the Supabase keys, how to run.</li>
+  <li>30-second screen recording as backup demo footage.</li>
+  <li>App icon — pomegranate mark on the dark navy background, exported at all required sizes.</li>
+</ul>
+
+<hr>
+
+<p class="muted">
+  This brief is for the Openwave 48-hour hackathon (İRİA × Nərimanov RİH × Tedspace, 2026). The web app is the primary submission; this iOS app demonstrates platform reach and serves real residents on the device they actually carry. Build accordingly.
+</p>
+
+</div>
+</body>
+</html>
